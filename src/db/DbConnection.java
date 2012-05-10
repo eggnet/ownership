@@ -1,4 +1,5 @@
 package db;
+import java.io.InputStreamReader;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -13,7 +14,7 @@ import java.util.Set;
 import ownership.Resources;
 
 public class DbConnection {
-
+	private ScriptRunner sr;
 	public static Connection conn = null;
 	public ResultSet savedResultSet = null;
 	public boolean isPaging = false;
@@ -153,8 +154,11 @@ public class DbConnection {
 	{
 		try {
 			conn = DriverManager.getConnection(Resources.dbUrl + dbName.toLowerCase(), Resources.dbUser, Resources.dbPassword);
+			sr = new ScriptRunner(conn, false, true);
+			sr.setLogWriter(null);
+			sr.runScript(new InputStreamReader(this.getClass().getResourceAsStream("createdb.sql")));
 		} 
-		catch (SQLException e) 
+		catch (Exception e) 
 		{
 			e.printStackTrace();
 			return false;
@@ -203,6 +207,11 @@ public class DbConnection {
 		return files;
 	}
 
+	/**
+	 * Returns an ordered map of <CommitId, Set<ChangedFilePaths>> before a given commitID
+	 * @param commitID
+	 * @return
+	 */
 	public Map<String, Set<String>> getCommitsBeforeChanges(String commitID)
 	{
 		try{
@@ -236,6 +245,7 @@ public class DbConnection {
 					currentFileset.add(rs.getString("file_id"));
 				}
 			}
+			changes.put(currentCommitId, currentFileset);
 			return changes;
 		}
 		catch (SQLException e)
@@ -246,7 +256,7 @@ public class DbConnection {
 	}
 	
 	/**
-	 * Return a list of commits and their changed files between any 2 commits
+	 * Return a list of commits and their changed files between any 2 commits, order matters.
 	 * @param beforeCommitID
 	 * @param afterCommitID
 	 * @return
@@ -254,13 +264,13 @@ public class DbConnection {
 	public Map<String, Set<String>> getCommitsBeforeAndAfterChanges(String beforeCommitID, String afterCommitID)
 	{
 		try{
-			Map<String, Set<String>> changes = new HashMap<String, Set<String>>();
+			Map<String, Set<String>> changes = new LinkedHashMap<String, Set<String>>();
 			String sql = "SELECT commit_id, file_id from changes natural join commits where " +
 					"(branch_id=? or branch_id is NULL) and commit_date < " +
 					"(select commit_date from commits where commit_id=? and " +
 					"(branch_id=? OR branch_id is NULL)) and commit_date > " +
 					"(select commit_date from commits where commit_id=? and " +
-					"(branch_id=? or branch_id is NULL)) ORDER BY commit_date;";
+					"(branch_id=? or branch_id is NULL)) ORDER BY commit_date DESC;";
 			
 			String[] params = {this.branchID, beforeCommitID, this.branchID, afterCommitID, this.branchID};
 			ResultSet rs = execPreparedQuery(sql, params);
@@ -287,6 +297,7 @@ public class DbConnection {
 					currentFileset.add(rs.getString("file_id"));
 				}
 			}
+			changes.put(currentCommitId, currentFileset);
 			return changes;
 		}
 		catch (SQLException e)
@@ -396,14 +407,19 @@ public class DbConnection {
 		}
 	}
 	
+	/**
+	 * Gets the latest commit in the owners table.
+	 * @return CommitID
+	 */
 	public String getLastOwnerCommit() 
 	{
 		try 
 		{
 			String sql = "Select commit_id from owners natural join commits order by commit_date desc;";
-			ResultSet rs = execPreparedQuery(sql, null);
+			String[] parms = {};
+			ResultSet rs = execPreparedQuery(sql, parms);
 			if (rs.next())
-				return rs.getString(0);
+				return rs.getString(1);
 			else
 				return null;
 		}
@@ -413,14 +429,19 @@ public class DbConnection {
 			return null;
 		}
 	}
+	/**
+	 * Gets the latest commit in the commits table
+	 * @return CommitID 
+	 */
 	public String getLastCommit() 
 	{
 		try 
 		{
 			String sql = "Select commit_id from commits order by commit_date desc;";
-			ResultSet rs = execPreparedQuery(sql, null);
+			String[] parms = {};
+			ResultSet rs = execPreparedQuery(sql, parms);
 			if (rs.next())
-				return rs.getString(0);
+				return rs.getString(1);
 			else
 				return null;
 		}

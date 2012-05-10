@@ -1,10 +1,14 @@
 package ownership;
 
+import java.util.Map;
+import java.util.Set;
+
 import db.DbConnection;
 
 public class OwnerManager {
 	DbConnection db;
-	
+	String startPoint = null;
+	String endPoint = null;
 	public OwnerManager(DbConnection db) {
 		this.db = db;
 	}	
@@ -14,21 +18,17 @@ public class OwnerManager {
 	 * @author braden
 	 */
 	public void update() {
-		// Check if the owners table is up to date.
-		if (this.isUpToDate())
-			return;
-		// Otherwise update the table.
-	}
-	
-	public boolean isUpToDate() {
-		//String endPoint = db.getLastOwnerCommit();
-		//String startPoint = db.getLastCommit();
-//		if (db.isCommitInOwners(CommitId))
-//			return true;
-		return false;
-	}
-	
-	public boolean test () {
-		return true;
+		endPoint = db.getLastOwnerCommit();
+		startPoint = db.getLastCommit();
+		Map<String, Set<String>> commitsBetween;
+		if (endPoint == null)
+			commitsBetween = db.getCommitsBeforeChanges(startPoint);
+		else
+			commitsBetween = db.getCommitsBeforeAndAfterChanges(startPoint, endPoint);
+		// Get all commits between these.
+		for (String key : commitsBetween.keySet())
+		{
+			System.out.println("Commit id: " + key);
+		}
 	}
 }
