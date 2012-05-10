@@ -7,7 +7,7 @@ public class OwnerManager {
 	
 	public OwnerManager(DbConnection db) {
 		this.db = db;
-	}
+	}	
 	/**
 	 * Checks the Owners table in our db to know if we need to update it,
 	 * then updates up to our given commit.
