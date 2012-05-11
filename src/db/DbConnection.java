@@ -5,11 +5,15 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
+
+import models.Commit;
+import models.OwnerRecord;
 
 import ownership.Resources;
 
@@ -21,6 +25,7 @@ public class DbConnection {
 	public static DbConnection ref = null;
 	private String branchName = null;
 	private String branchID = null;
+	public static Statement currentBatch;
 
 	private DbConnection() 
 	{
@@ -157,6 +162,7 @@ public class DbConnection {
 			sr = new ScriptRunner(conn, false, true);
 			sr.setLogWriter(null);
 			sr.runScript(new InputStreamReader(this.getClass().getResourceAsStream("createdb.sql")));
+			currentBatch = conn.createStatement();
 		} 
 		catch (Exception e) 
 		{
@@ -210,17 +216,126 @@ public class DbConnection {
 	/**
 	 * Returns an ordered map of <CommitId, Set<ChangedFilePaths>> before a given commitID
 	 * @param commitID
+	 * @param ascending
 	 * @return
 	 */
-	public Map<String, Set<String>> getCommitsBeforeChanges(String commitID)
+	public Map<String, Set<String>> getCommitsBeforeChanges(String commitID, boolean ascending)
 	{
 		try{
 			Map<String, Set<String>> changes = new LinkedHashMap<String, Set<String>>();
 			String sql = "SELECT commit_id, file_id from changes natural join commits where " +
 					"(branch_id=? or branch_id is NULL) and commit_date < " +
 					"(select commit_date from commits where commit_id=? and " +
-					"(branch_id=? OR branch_id is NULL)) ORDER BY commit_date desc;";
+					"(branch_id=? OR branch_id is NULL)) ORDER BY commit_date";
+			if (!ascending)
+				sql += " desc";
 			String[] params = {this.branchID, commitID, this.branchID};
+			ResultSet rs = execPreparedQuery(sql, params);
+			String currentCommitId;
+			Set<String> currentFileset;
+			if (!rs.next())
+				return changes;
+			currentFileset = new HashSet<String>();
+			currentCommitId = rs.getString("commit_id");
+			currentFileset.add(rs.getString("file_id"));
+			while(rs.next())
+			{
+				if (rs.getString("commit_id").equals(currentCommitId))
+				{
+					// append to the current commit
+					currentFileset.add(rs.getString("file_id"));
+				}
+				else
+				{
+					// start a new one
+					changes.put(currentCommitId, currentFileset);
+					currentFileset = new HashSet<String>();
+					currentCommitId = rs.getString("commit_id");
+					currentFileset.add(rs.getString("file_id"));
+				}
+			}
+			changes.put(currentCommitId, currentFileset);
+			return changes;
+		}
+		catch (SQLException e)
+		{
+			e.printStackTrace();
+			return null;
+		}
+	}
+	
+	/**
+	 * Returns an ordered map of <Commit, Set<ChangedFilePaths>> before a given commitID
+	 * @param commitID
+	 * @param ascending
+	 * @return
+	 */
+	public Map<Commit, Set<String>> getCommitObjectsBeforeChanges(String commitID, boolean ascending)
+	{
+		try{
+			Map<Commit, Set<String>> changes = new LinkedHashMap<Commit, Set<String>>();
+			String sql = "SELECT commit_id, author, author_email, comments, commit_date, branch_id, file_id from changes natural join commits where " +
+					"(branch_id=? or branch_id is NULL) and commit_date < " +
+					"(select commit_date from commits where commit_id=? and " +
+					"(branch_id=? OR branch_id is NULL)) ORDER BY commit_date";
+			if (!ascending)
+				sql += " desc";
+			String[] params = {this.branchID, commitID, this.branchID};
+			ResultSet rs = execPreparedQuery(sql, params);
+			Commit currentCommit;
+			Set<String> currentFileset;
+			if (!rs.next())
+				return changes;
+			currentFileset = new HashSet<String>();
+			currentCommit = new Commit(rs.getString(1), rs.getString(2), rs.getString(3), rs.getString(4), rs.getTimestamp(5), rs.getString(6));
+			currentFileset.add(rs.getString("file_id"));
+			while(rs.next())
+			{
+				if (rs.getString("commit_id").equals(currentCommit.getCommit_id()))
+				{
+					// append to the current commit
+					currentFileset.add(rs.getString("file_id"));
+				}
+				else
+				{
+					// start a new one
+					changes.put(currentCommit, currentFileset);
+					currentFileset = new HashSet<String>();
+					currentCommit = new Commit(rs.getString(1), rs.getString(2), rs.getString(3), rs.getString(4), rs.getTimestamp(5), rs.getString(6));
+					currentFileset.add(rs.getString("file_id"));
+				}
+			}
+			changes.put(currentCommit, currentFileset);
+			return changes;
+		}
+		catch (SQLException e)
+		{
+			e.printStackTrace();
+			return null;
+		}
+	}
+	
+	/**
+	 * Return a list of commits and their changed files between any 2 commits, order matters.
+	 * @param beforeCommitID
+	 * @param afterCommitID
+	 * @param ascending
+	 * @return
+	 */
+	public Map<String, Set<String>> getCommitsBeforeAndAfterChanges(String beforeCommitID, String afterCommitID, boolean ascending)
+	{
+		try{
+			Map<String, Set<String>> changes = new LinkedHashMap<String, Set<String>>();
+			String sql = "SELECT commit_id, file_id from changes natural join commits where " +
+					"(branch_id=? or branch_id is NULL) and commit_date < " +
+					"(select commit_date from commits where commit_id=? and " +
+					"(branch_id=? OR branch_id is NULL)) and commit_date > " +
+					"(select commit_date from commits where commit_id=? and " +
+					"(branch_id=? or branch_id is NULL)) ORDER BY commit_date";
+			if (!ascending)
+				sql += " desc";
+			
+			String[] params = {this.branchID, beforeCommitID, this.branchID, afterCommitID, this.branchID};
 			ResultSet rs = execPreparedQuery(sql, params);
 			String currentCommitId;
 			Set<String> currentFileset;
@@ -259,31 +374,34 @@ public class DbConnection {
 	 * Return a list of commits and their changed files between any 2 commits, order matters.
 	 * @param beforeCommitID
 	 * @param afterCommitID
+	 * @param ascending
 	 * @return
 	 */
-	public Map<String, Set<String>> getCommitsBeforeAndAfterChanges(String beforeCommitID, String afterCommitID)
+	public Map<Commit, Set<String>> getCommitObjectsBeforeAndAfterChanges(String beforeCommitID, String afterCommitID, boolean ascending)
 	{
 		try{
-			Map<String, Set<String>> changes = new LinkedHashMap<String, Set<String>>();
-			String sql = "SELECT commit_id, file_id from changes natural join commits where " +
+			Map<Commit, Set<String>> changes = new LinkedHashMap<Commit, Set<String>>();
+			String sql = "SELECT commit_id, author, author_email, comments, commit_date, branch_id, file_id from changes natural join commits where " +
 					"(branch_id=? or branch_id is NULL) and commit_date < " +
 					"(select commit_date from commits where commit_id=? and " +
 					"(branch_id=? OR branch_id is NULL)) and commit_date > " +
 					"(select commit_date from commits where commit_id=? and " +
-					"(branch_id=? or branch_id is NULL)) ORDER BY commit_date DESC;";
+					"(branch_id=? or branch_id is NULL)) ORDER BY commit_date";
+			if (!ascending)
+				sql += " desc";
 			
 			String[] params = {this.branchID, beforeCommitID, this.branchID, afterCommitID, this.branchID};
 			ResultSet rs = execPreparedQuery(sql, params);
-			String currentCommitId;
+			Commit currentCommit;
 			Set<String> currentFileset;
 			if (!rs.next())
 				return changes;
 			currentFileset = new HashSet<String>();
-			currentCommitId = rs.getString("commit_id");
+			currentCommit = new Commit(rs.getString(1), rs.getString(2), rs.getString(3), rs.getString(4), rs.getTimestamp(5), rs.getString(6));
 			currentFileset.add(rs.getString("file_id"));
 			while(rs.next())
 			{
-				if (rs.getString("commit_id").equals(currentCommitId))
+				if (rs.getString("commit_id").equals(currentCommit.getCommit_id()))
 				{
 					// append to the current commit
 					currentFileset.add(rs.getString("file_id"));
@@ -291,13 +409,13 @@ public class DbConnection {
 				else
 				{
 					// start a new one
-					changes.put(currentCommitId, currentFileset);
+					changes.put(currentCommit, currentFileset);
 					currentFileset = new HashSet<String>();
-					currentCommitId = rs.getString("commit_id");
+					currentCommit = new Commit(rs.getString(1), rs.getString(2), rs.getString(3), rs.getString(4), rs.getTimestamp(5), rs.getString(6));
 					currentFileset.add(rs.getString("file_id"));
 				}
 			}
-			changes.put(currentCommitId, currentFileset);
+			changes.put(currentCommit, currentFileset);
 			return changes;
 		}
 		catch (SQLException e)
@@ -449,6 +567,110 @@ public class DbConnection {
 		{
 			e.printStackTrace();
 			return null;
+		}
+	}
+	
+	/**
+	 * Gets the latest revision of a file from a base commitId
+	 * @param CommitId
+	 * @param fileId
+	 * @return
+	 */
+	public String getLatestRevOfFile(String CommitId, String fileId)
+	{
+		try {
+			// get the last commit that changed the file
+			String sql = "SELECT commit_id from changes natural join commits where commit_date < " +
+					"(SELECT commit_date from commits where commit_id=?)" +
+					" and file_id=? order by commit_date desc limit 1;";
+			String[] parms = {CommitId, fileId};
+			ResultSet rs = execPreparedQuery(sql, parms);
+			if (!rs.next())
+				return null;
+			
+			// Get the raw data 
+			String ChangingCommitId = rs.getString("commit_id");
+			sql = "SELECT raw_file from files where commit_id=? and file_id=?;";
+			String[] secondParms = {ChangingCommitId, fileId};
+			rs = execPreparedQuery(sql, secondParms);
+			if(!rs.next())
+				return "Binary file";
+			return rs.getString("raw_file");
+		}
+		catch (SQLException e)
+		{
+			e.printStackTrace();
+			return null;
+		}
+	}
+	
+	public Commit getCommit(String CommitId)
+	{
+		Commit c = null;
+		try
+		{
+			String sql = "SELECT commit_id, author, author_email, comments, commit_date, branch_id FROM Commits where commit_id=? and (branch_id=? or branch_id is NULL);";
+			String[] parms = {CommitId};
+			ResultSet rs = execPreparedQuery(sql, parms);
+			if (!rs.next())
+				return null;
+			else
+				return new Commit(rs.getInt(1), rs.getString(2), rs.getString(3), rs.getString(4), rs.getString(5), rs.getTimestamp(6), rs.getString(7));
+		}
+		catch (SQLException e)
+		{
+			e.printStackTrace();
+			return null;
+		}
+	}
+	
+	public void insertOwnerRecord(String CommitId, String Author, String FileId, int ChangeStart, int ChangeEnd, String isInsert)
+	{
+		try
+		{
+			PreparedStatement s = conn.prepareStatement(
+					"INSERT INTO owners values (?,?,?,'" + ChangeStart + "','" + ChangeEnd + "', ?)");
+			s.setString(1, CommitId);
+			s.setString(2, Author);
+			s.setString(3, FileId);
+			s.setString(4, isInsert);
+			currentBatch.addBatch(s.toString());
+		}
+		catch(SQLException e)
+		{
+			e.printStackTrace();
+		}
+	}
+	
+	public OwnerRecord getOwnerRecord(String CommitId, String FileId)
+	{
+		OwnerRecord o = new OwnerRecord();
+		try
+		{
+			String sql = "SELECT * FROM owners where commit_id=? and file_id=?";
+			String[] parms = {CommitId, FileId};
+			ResultSet rs = execPreparedQuery(sql, parms);
+			rs.next();
+			//TODO @braden
+			return o;
+		}
+		catch(SQLException e )
+		{
+			e.printStackTrace();
+			return null;
+		}
+	}
+	
+	public boolean execBatch() {
+		try {
+			currentBatch.executeBatch();
+			currentBatch.clearBatch();
+			return true;
+		}
+		catch (SQLException e)
+		{
+			e.printStackTrace();
+			return false;
 		}
 	}
 }

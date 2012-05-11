@@ -1,11 +1,10 @@
 package models;
 
-public class Owner {
+public class OwnerRecord {
 	private String Id;
 	private String Email;
-	private int Weight;
 	
-	public Owner() { } 
+	public OwnerRecord() { } 
 	public String getId() {
 		return Id;
 	}
@@ -17,11 +16,5 @@ public class Owner {
 	}
 	public void setEmail(String email) {
 		Email = email;
-	}
-	public int getWeight() {
-		return Weight;
-	}
-	public void setWeight(int weight) {
-		Weight = weight;
 	}
 }
