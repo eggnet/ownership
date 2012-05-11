@@ -6,5 +6,5 @@ CREATE TABLE IF NOT EXISTS owners (
 	file_id character varying(255) NOT NULL,
 	char_start integer NOT NULL,
 	char_end integer NOT NULL,
-	is_insert character (1)
+	change_type character varying (10)
 );

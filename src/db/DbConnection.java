@@ -16,6 +16,7 @@ import models.Commit;
 import models.OwnerRecord;
 
 import ownership.Resources;
+import ownership.Resources.ChangeType;
 
 public class DbConnection {
 	private ScriptRunner sr;
@@ -273,14 +274,14 @@ public class DbConnection {
 	 * @param ascending
 	 * @return
 	 */
-	public Map<Commit, Set<String>> getCommitObjectsBeforeChanges(String commitID, boolean ascending, boolean inclusive)
+	public Map<Commit, Map<String, Resources.ChangeType>> getCommitObjectsBeforeChanges(String commitID, boolean ascending, boolean inclusive)
 	{
 		try{
-			Map<Commit, Set<String>> changes = new LinkedHashMap<Commit, Set<String>>();
+			Map<Commit, Map<String, Resources.ChangeType>> changes = new LinkedHashMap<Commit, Map<String, Resources.ChangeType>>();
 			String inclusiveStr = " ";
 			if (inclusive)
 				inclusiveStr = "= ";
-			String sql = "SELECT commit_id, author, author_email, comments, commit_date, branch_id, file_id from changes natural join commits where " +
+			String sql = "SELECT commit_id, author, author_email, comments, commit_date, branch_id, file_id, change_type from changes natural join commits where " +
 					"(branch_id=? or branch_id is NULL) and commit_date <" + inclusiveStr + 
 					"(select commit_date from commits where commit_id=? and " +
 					"(branch_id=? OR branch_id is NULL)) ORDER BY commit_date";
@@ -289,26 +290,26 @@ public class DbConnection {
 			String[] params = {this.branchID, commitID, this.branchID};
 			ResultSet rs = execPreparedQuery(sql, params);
 			Commit currentCommit;
-			Set<String> currentFileset;
+			Map<String, Resources.ChangeType> currentFileset;
 			if (!rs.next())
 				return changes;
-			currentFileset = new HashSet<String>();
+			currentFileset = new HashMap<String, Resources.ChangeType>();
 			currentCommit = new Commit(rs.getString(1), rs.getString(2), rs.getString(3), rs.getString(4), rs.getTimestamp(5), rs.getString(6));
-			currentFileset.add(rs.getString("file_id"));
+			currentFileset.put(rs.getString("file_id"), Resources.ChangeType.valueOf(rs.getString("change_type")));
 			while(rs.next())
 			{
 				if (rs.getString("commit_id").equals(currentCommit.getCommit_id()))
 				{
 					// append to the current commit
-					currentFileset.add(rs.getString("file_id"));
+					currentFileset.put(rs.getString("file_id"), Resources.ChangeType.valueOf(rs.getString("change_type")));
 				}
 				else
 				{
 					// start a new one
 					changes.put(currentCommit, currentFileset);
-					currentFileset = new HashSet<String>();
+					currentFileset = new HashMap<String, Resources.ChangeType>();
 					currentCommit = new Commit(rs.getString(1), rs.getString(2), rs.getString(3), rs.getString(4), rs.getTimestamp(5), rs.getString(6));
-					currentFileset.add(rs.getString("file_id"));
+					currentFileset.put(rs.getString("file_id"), Resources.ChangeType.valueOf(rs.getString("change_type")));
 				}
 			}
 			changes.put(currentCommit, currentFileset);
@@ -386,14 +387,14 @@ public class DbConnection {
 	 * @param ascending
 	 * @return
 	 */
-	public Map<Commit, Set<String>> getCommitObjectsBeforeAndAfterChanges(String beforeCommitID, String afterCommitID, boolean ascending, boolean inclusive)
+	public Map<Commit, Map<String, Resources.ChangeType>> getCommitObjectsBeforeAndAfterChanges(String beforeCommitID, String afterCommitID, boolean ascending, boolean inclusive)
 	{
 		try{
-			Map<Commit, Set<String>> changes = new LinkedHashMap<Commit, Set<String>>();
+			Map<Commit, Map<String, Resources.ChangeType>> changes = new LinkedHashMap<Commit, Map<String, Resources.ChangeType>>();
 			String inclusiveStr = " ";
 			if (inclusive)
 				inclusiveStr = "= ";
-			String sql = "SELECT commit_id, author, author_email, comments, commit_date, branch_id, file_id from changes natural join commits where " +
+			String sql = "SELECT commit_id, author, author_email, comments, commit_date, branch_id, file_id, change_type from changes natural join commits where " +
 					"(branch_id=? or branch_id is NULL) and commit_date <" + inclusiveStr + 
 					"(select commit_date from commits where commit_id=? and " +
 					"(branch_id=? OR branch_id is NULL)) and commit_date >" + inclusiveStr +
@@ -405,26 +406,26 @@ public class DbConnection {
 			String[] params = {this.branchID, beforeCommitID, this.branchID, afterCommitID, this.branchID};
 			ResultSet rs = execPreparedQuery(sql, params);
 			Commit currentCommit;
-			Set<String> currentFileset;
+			Map<String, Resources.ChangeType> currentFileset;
 			if (!rs.next())
 				return changes;
-			currentFileset = new HashSet<String>();
+			currentFileset = new HashMap<String, Resources.ChangeType>();
 			currentCommit = new Commit(rs.getString(1), rs.getString(2), rs.getString(3), rs.getString(4), rs.getTimestamp(5), rs.getString(6));
-			currentFileset.add(rs.getString("file_id"));
+			currentFileset.put(rs.getString("file_id"), Resources.ChangeType.valueOf(rs.getString("change_type")));
 			while(rs.next())
 			{
 				if (rs.getString("commit_id").equals(currentCommit.getCommit_id()))
 				{
 					// append to the current commit
-					currentFileset.add(rs.getString("file_id"));
+					currentFileset.put(rs.getString("file_id"), Resources.ChangeType.valueOf(rs.getString("change_type")));
 				}
 				else
 				{
 					// start a new one
 					changes.put(currentCommit, currentFileset);
-					currentFileset = new HashSet<String>();
+					currentFileset = new HashMap<String, Resources.ChangeType>();
 					currentCommit = new Commit(rs.getString(1), rs.getString(2), rs.getString(3), rs.getString(4), rs.getTimestamp(5), rs.getString(6));
-					currentFileset.add(rs.getString("file_id"));
+					currentFileset.put(rs.getString("file_id"), Resources.ChangeType.valueOf(rs.getString("change_type")));
 				}
 			}
 			changes.put(currentCommit, currentFileset);
@@ -618,7 +619,6 @@ public class DbConnection {
 	
 	public Commit getCommit(String CommitId)
 	{
-		Commit c = null;
 		try
 		{
 			String sql = "SELECT commit_id, author, author_email, comments, commit_date, branch_id FROM Commits where commit_id=? and (branch_id=? or branch_id is NULL);";
@@ -636,7 +636,7 @@ public class DbConnection {
 		}
 	}
 	
-	public void insertOwnerRecord(String CommitId, String Author, String FileId, int ChangeStart, int ChangeEnd, boolean isInsert)
+	public void insertOwnerRecord(String CommitId, String Author, String FileId, int ChangeStart, int ChangeEnd, ChangeType changeType)
 	{
 		try
 		{
@@ -645,31 +645,12 @@ public class DbConnection {
 			s.setString(1, CommitId);
 			s.setString(2, Author);
 			s.setString(3, FileId);
-			s.setBoolean(4, isInsert);
+			s.setString(4, changeType.toString());
 			currentBatch.addBatch(s.toString());
 		}
 		catch(SQLException e)
 		{
 			e.printStackTrace();
-		}
-	}
-	
-	public OwnerRecord getOwnerRecord(String CommitId, String FileId)
-	{
-		OwnerRecord o = new OwnerRecord();
-		try
-		{
-			String sql = "SELECT * FROM owners where commit_id=? and file_id=?";
-			String[] parms = {CommitId, FileId};
-			ResultSet rs = execPreparedQuery(sql, parms);
-			rs.next();
-			//TODO @braden
-			return o;
-		}
-		catch(SQLException e )
-		{
-			e.printStackTrace();
-			return null;
 		}
 	}
 	
