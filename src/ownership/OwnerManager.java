@@ -27,42 +27,50 @@ public class OwnerManager {
 		startPoint = db.getLastCommit();
 		Map<Commit, Set<String>> commitsBetween;
 		if (endPoint == null)
-			commitsBetween = db.getCommitObjectsBeforeChanges(startPoint, true);
+			commitsBetween = db.getCommitObjectsBeforeChanges(startPoint, true, true);
 		else
-			commitsBetween = db.getCommitObjectsBeforeAndAfterChanges(startPoint, endPoint, true);
-		
+			commitsBetween = db.getCommitObjectsBeforeAndAfterChanges(startPoint, endPoint, true, true);
 		// Get all commits between these.
 		for (Commit key : commitsBetween.keySet())
 		{
-			System.out.println("Commit id: " + key + "\t{");
+			System.out.println("Commit id: " + key.getCommit_id() + "\t" + key.getCommit_date().toString());
 			for (String filePath: commitsBetween.get(key))
 			{
-				System.out.println("\tChanged file : " + filePath);
+				//System.out.println("\tChanged file : " + filePath);
 				// need to update our owners table
 				diff = new filediffer(db.getLatestRevOfFile(key.getCommit_id(), filePath), db.getRawFile(filePath, key.getCommit_id()));
-				diff.diffFilesLineMode();
-				if(diff.isModified())
+				if (diff.getNewFileContent() == null)
 				{
-					// return the change sets from the two files
-					System.out.println("+-\t" + filePath);
-					List<diffObjectResult> deleteObjects = diff.getDeleteObjects();
-					List<diffObjectResult> insertObjects = diff.getInsertObjects();
-					diff.print();
-					
-					// for all the insert objects.
-					for (diffObjectResult insert : insertObjects)
-						db.insertOwnerRecord(key.getCommit_id(), key.getAuthor(), filePath, insert.start, insert.end, "0");
-					
-					for (diffObjectResult delete : deleteObjects)
-						db.insertOwnerRecord(key.getCommit_id(), key.getAuthor(), filePath, delete.start, delete.end, "1");
-					
-					db.execBatch();	// Make the insertion
-				}		
+					// deleted
+					db.insertOwnerRecord(key.getCommit_id(), key.getAuthor(), filePath, 0, -1, false);
+				}
+				else if (diff.getOldFileContent() == null)
+				{
+					// added
+					db.insertOwnerRecord(key.getCommit_id(), key.getAuthor(), filePath, 0, -1, true);
+				}
+				else 
+				{
+					diff.diffFilesLineMode();
+					if(diff.isModified())
+					{
+						// return the change sets from the two files
+						//System.out.println("+-\t" + filePath);
+						List<diffObjectResult> deleteObjects = diff.getDeleteObjects();
+						List<diffObjectResult> insertObjects = diff.getInsertObjects();
+						//diff.print();
+						
+						// for all the insert objects.
+						for (diffObjectResult insert : insertObjects)
+							db.insertOwnerRecord(key.getCommit_id(), key.getAuthor(), filePath, insert.start, insert.end, true);
+						
+						for (diffObjectResult delete : deleteObjects)
+							db.insertOwnerRecord(key.getCommit_id(), key.getAuthor(), filePath, delete.start, delete.end, false);
+					}	
+				}	
 			}
-			System.out.println("}");
+			db.execBatch();	// Make the insertion
+//			System.out.println("}");
 		}
 	}
-	
-	
-	
 }

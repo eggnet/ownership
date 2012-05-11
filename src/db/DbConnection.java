@@ -219,12 +219,15 @@ public class DbConnection {
 	 * @param ascending
 	 * @return
 	 */
-	public Map<String, Set<String>> getCommitsBeforeChanges(String commitID, boolean ascending)
+	public Map<String, Set<String>> getCommitsBeforeChanges(String commitID, boolean ascending, boolean inclusive)
 	{
 		try{
 			Map<String, Set<String>> changes = new LinkedHashMap<String, Set<String>>();
+			String inclusiveStr = " ";
+			if (inclusive)
+				inclusiveStr = "= ";
 			String sql = "SELECT commit_id, file_id from changes natural join commits where " +
-					"(branch_id=? or branch_id is NULL) and commit_date < " +
+					"(branch_id=? or branch_id is NULL) and commit_date <" + inclusiveStr + 
 					"(select commit_date from commits where commit_id=? and " +
 					"(branch_id=? OR branch_id is NULL)) ORDER BY commit_date";
 			if (!ascending)
@@ -270,12 +273,15 @@ public class DbConnection {
 	 * @param ascending
 	 * @return
 	 */
-	public Map<Commit, Set<String>> getCommitObjectsBeforeChanges(String commitID, boolean ascending)
+	public Map<Commit, Set<String>> getCommitObjectsBeforeChanges(String commitID, boolean ascending, boolean inclusive)
 	{
 		try{
 			Map<Commit, Set<String>> changes = new LinkedHashMap<Commit, Set<String>>();
+			String inclusiveStr = " ";
+			if (inclusive)
+				inclusiveStr = "= ";
 			String sql = "SELECT commit_id, author, author_email, comments, commit_date, branch_id, file_id from changes natural join commits where " +
-					"(branch_id=? or branch_id is NULL) and commit_date < " +
+					"(branch_id=? or branch_id is NULL) and commit_date <" + inclusiveStr + 
 					"(select commit_date from commits where commit_id=? and " +
 					"(branch_id=? OR branch_id is NULL)) ORDER BY commit_date";
 			if (!ascending)
@@ -322,14 +328,17 @@ public class DbConnection {
 	 * @param ascending
 	 * @return
 	 */
-	public Map<String, Set<String>> getCommitsBeforeAndAfterChanges(String beforeCommitID, String afterCommitID, boolean ascending)
+	public Map<String, Set<String>> getCommitsBeforeAndAfterChanges(String beforeCommitID, String afterCommitID, boolean ascending, boolean inclusive)
 	{
 		try{
 			Map<String, Set<String>> changes = new LinkedHashMap<String, Set<String>>();
+			String inclusiveStr = " ";
+			if (inclusive)
+				inclusiveStr = "= ";
 			String sql = "SELECT commit_id, file_id from changes natural join commits where " +
-					"(branch_id=? or branch_id is NULL) and commit_date < " +
+					"(branch_id=? or branch_id is NULL) and commit_date <" + inclusiveStr + 
 					"(select commit_date from commits where commit_id=? and " +
-					"(branch_id=? OR branch_id is NULL)) and commit_date > " +
+					"(branch_id=? OR branch_id is NULL)) and commit_date >" + inclusiveStr + 
 					"(select commit_date from commits where commit_id=? and " +
 					"(branch_id=? or branch_id is NULL)) ORDER BY commit_date";
 			if (!ascending)
@@ -377,14 +386,17 @@ public class DbConnection {
 	 * @param ascending
 	 * @return
 	 */
-	public Map<Commit, Set<String>> getCommitObjectsBeforeAndAfterChanges(String beforeCommitID, String afterCommitID, boolean ascending)
+	public Map<Commit, Set<String>> getCommitObjectsBeforeAndAfterChanges(String beforeCommitID, String afterCommitID, boolean ascending, boolean inclusive)
 	{
 		try{
 			Map<Commit, Set<String>> changes = new LinkedHashMap<Commit, Set<String>>();
+			String inclusiveStr = " ";
+			if (inclusive)
+				inclusiveStr = "= ";
 			String sql = "SELECT commit_id, author, author_email, comments, commit_date, branch_id, file_id from changes natural join commits where " +
-					"(branch_id=? or branch_id is NULL) and commit_date < " +
+					"(branch_id=? or branch_id is NULL) and commit_date <" + inclusiveStr + 
 					"(select commit_date from commits where commit_id=? and " +
-					"(branch_id=? OR branch_id is NULL)) and commit_date > " +
+					"(branch_id=? OR branch_id is NULL)) and commit_date >" + inclusiveStr +
 					"(select commit_date from commits where commit_id=? and " +
 					"(branch_id=? or branch_id is NULL)) ORDER BY commit_date";
 			if (!ascending)
@@ -624,7 +636,7 @@ public class DbConnection {
 		}
 	}
 	
-	public void insertOwnerRecord(String CommitId, String Author, String FileId, int ChangeStart, int ChangeEnd, String isInsert)
+	public void insertOwnerRecord(String CommitId, String Author, String FileId, int ChangeStart, int ChangeEnd, boolean isInsert)
 	{
 		try
 		{
@@ -633,7 +645,7 @@ public class DbConnection {
 			s.setString(1, CommitId);
 			s.setString(2, Author);
 			s.setString(3, FileId);
-			s.setString(4, isInsert);
+			s.setBoolean(4, isInsert);
 			currentBatch.addBatch(s.toString());
 		}
 		catch(SQLException e)
