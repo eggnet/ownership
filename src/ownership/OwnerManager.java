@@ -4,13 +4,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import ownership.Resources.ChangeType;
-
 import models.Commit;
+import db.DbConnection;
+import db.Resources;
 import differ.filediffer;
 import differ.filediffer.diffObjectResult;
-import db.DbConnection;
-
 public class OwnerManager {
 	DbConnection db;
 	String startPoint = null;
@@ -27,6 +25,8 @@ public class OwnerManager {
 	public void update() {
 		endPoint = db.getLastOwnerCommit();
 		startPoint = db.getLastCommit();
+		if (startPoint.equals(endPoint))
+			return;
 		Map<Commit, Map<String, Resources.ChangeType>> commitsBetween;
 		if (endPoint == null)
 			commitsBetween = db.getCommitObjectsBeforeChanges(startPoint, true, true);
@@ -43,11 +43,11 @@ public class OwnerManager {
 				diff = new filediffer(db.getLatestRevOfFile(key.getCommit_id(), filePath), db.getRawFile(filePath, key.getCommit_id()));
 				if (diff.getNewFileContent() == null)
 				{
-					db.insertOwnerRecord(key.getCommit_id(), key.getAuthor_email(), filePath, 0, -1, ChangeType.DELETE);
+					db.insertOwnerRecord(key.getCommit_id(), key.getAuthor_email(), filePath, 0, -1, Resources.ChangeType.DELETE);
 				}
 				else if (diff.getOldFileContent() == null)
 				{
-					db.insertOwnerRecord(key.getCommit_id(), key.getAuthor_email(), filePath, 0, -1, ChangeType.ADD);
+					db.insertOwnerRecord(key.getCommit_id(), key.getAuthor_email(), filePath, 0, -1, Resources.ChangeType.ADD);
 				}
 				else 
 				{
@@ -60,10 +60,10 @@ public class OwnerManager {
 						
 						// for all the insert objects.
 						for (diffObjectResult insert : insertObjects) 
-							db.insertOwnerRecord(key.getCommit_id(), key.getAuthor_email(), filePath, insert.start, insert.end, ChangeType.MODIFY);
+							db.insertOwnerRecord(key.getCommit_id(), key.getAuthor_email(), filePath, insert.start, insert.end, Resources.ChangeType.MODIFY);
 						
 						for (diffObjectResult delete : deleteObjects)
-							db.insertOwnerRecord(key.getCommit_id(), key.getAuthor_email(), filePath, delete.start, delete.end, ChangeType.MODIFY);
+							db.insertOwnerRecord(key.getCommit_id(), key.getAuthor_email(), filePath, delete.start, delete.end, Resources.ChangeType.MODIFY);
 					}	
 				}	
 			}

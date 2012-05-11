@@ -1,11 +1,11 @@
 package ownership;
 
-import db.DbConnection;
+import db.OwnerDb;;
 
 public class Main {
 	public static void main(String[] args)
 	{
-		DbConnection db = DbConnection.getInstance();
+		OwnerDb db = new OwnerDb();
 		db.connect(args[0]);
 		db.setBranchName(args[1]);
 		OwnerManager ownerMgr = new OwnerManager(db);
