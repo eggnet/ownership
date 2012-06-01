@@ -40,7 +40,7 @@ public class OwnerManager {
 			{
 				Set<String> s = commitsBetween.get(key).keySet();
 				// need to update our owners table
-				diff = new filediffer(db.getLatestRevOfFile(key.getCommit_id(), filePath), db.getRawFile(filePath, key.getCommit_id()));
+				diff = new filediffer(db.getLatestRevOfFile(key.getCommit_id(), filePath), db.getRawFileFromDiffTree(filePath, key.getCommit_id()));
 				if (diff.getNewFileContent() == null)
 				{
 					db.insertOwnerRecord(key.getCommit_id(), key.getAuthor_email(), filePath, 0, -1, Resources.ChangeType.DELETE);
